@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+	<meta charset="UTF-8">
+	<!-- 手機畫面適配 -->
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="theme-color" content="#17324d">
+	<title>台股／ETF Tick 損益計算器</title>
+	<!-- PWA 設定 -->
+	<link rel="manifest" href="./manifest.json">
+	<link rel="apple-touch-icon" href="./icons/icon-192.png">
+	<style>
+		* {
+			box-sizing: border-box;
+		}
+		
+		body {
+			margin: 0;
+			padding: 18px 12px;
+			background: #f3f6f9;
+			color: #203040;
+			font-family: Arial, "Noto Sans TC", sans-serif;
+		}
+		
+		main {
+			max-width: 740px;
+			margin: auto;
+		}
+		
+		h1 {
+			font-size: 1.4rem;
+			margin: 4px 0;
+		}
+		
+		h2 {
+			font-size: 1.05rem;
+			margin: 0 0 12px;
+		}
+		
+		.sub, .note {
+			color: #627384;
+			font-size: .86rem;
+			line-height: 1.6;
+		}
+		
+		.panel {
+			background: white;
+			border: 1px solid #dce4eb;
+			border-radius: 13px;
+			padding: 16px;
+			margin: 13px 0;
+		}
+		
+		.grid {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+			gap: 12px;
+		}
+		
+		.field {
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+		}
+		
+		label {
+			font-weight: 650;
+			font-size: .9rem;
+		}
+		
+		input, select {
+			font: inherit;
+			padding: 11px;
+			border: 1px solid #bdc9d4;
+			border-radius: 8px;
+			background: white;
+			color: #203040;
+			width: 100%;
+		}
+		
+		button {
+			width: 100%;
+			padding: 13px;
+			margin-top: 14px;
+			border: 0;
+			border-radius: 9px;
+			background: #173f60;
+			color: white;
+			font-size: 1rem;
+			font-weight: 700;
+			cursor: pointer;
+		}
+		
+		button:active {
+			opacity: .85;
+		}
+		
+		.metrics {
+			display: grid;
+			grid-template-columns: repeat(3, 1fr);
+			gap: 8px;
+		}
+		
+		.metric {
+			background: #f1f5f8;
+			padding: 11px;
+			border-radius: 8px;
+		}
+		
+		.metric small {
+			display: block;
+			color: #627384;
+			font-size: .78rem;
+		}
+		
+		.metric strong {
+			display: block;
+			margin-top: 5px;
+			font-size: 1.08rem;
+			overflow-wrap: anywhere;
+		}
+		
+		.profit {
+			color: #087a4b;
+		}
+		
+		.loss, .error {
+			color: #bd3028;
+		}
+		
+		.error {
+			font-size: .9rem;
+			margin-top: 8px;
+		}
+		
+		.tablewrap {
+			overflow-x: auto;
+		}
+		
+		table {
+			border-collapse: collapse;
+			width: 100%;
+			font-size: .9rem;
+		}
+		
+		th, td {
+			padding: 9px 6px;
+			border-bottom: 1px solid #e5ebf0;
+			text-align: right;
+			white-space: nowrap;
+		}
+		
+		th:first-child,
+		td:first-child {
+			text-align: left;
+		}
+		
+		th {
+			background: #f7f9fb;
+			color: #536779;
+		}
+		
+		[hidden] {
+			display: none !important;
+		}
+		
+		@media(max-width:520px) {
+			.grid {
+				grid-template-columns: 1fr;
+			}
+		
+			.metrics {
+				grid-template-columns: 1fr;
+			}
+		
+			.metric {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+			}
+		
+			.metric strong {
+				margin: 0;
+				font-size: 1rem;
+			}
+		}
+	</style>
+</head>
+
+<body>
+<main>
+	<h1>當沖 Tick 損益計算器</h1>
+	<p class="sub" hidden>計算含手續費與證交稅的預估損益兩平價位</p>
+	
+	<!-- 輸入區 -->
+	<section class="panel">
+	
+	<div class="grid">	
+		<div class="field">
+			<label for="product">商品類型</label>
+	
+			<select id="product">
+				<option value="stock">一般股票</option>
+				<option value="etf">ETF</option>
+			</select>
+		</div>	
+		<div class="field">
+			<label for="direction">交易方向</label>
+	
+			<select id="direction">
+				<option value="long">先買後賣</option>
+				<option value="short">先賣後買</option>
+			</select>
+		</div>
+		<div class="field">
+			<label for="price">進場價格（元）</label>
+	
+			<input
+				id="price"
+				type="number"
+				min="0.01"
+				step="0.01"
+				value="100"
+				inputmode="decimal">
+		</div>
+		<div class="field">
+			<label for="shares">股數</label>
+	
+			<input
+				id="shares"
+				type="number"
+				min="1"
+				step="1"
+				value="1000"
+				inputmode="numeric">
+		</div>
+		<div class="field">
+			<label for="discount">手續費折扣</label>
+	
+			<select id="discount">
+				<option value="1" selected>無折扣</option>
+				<option value="0.5">5 折</option>
+				<option value="0.25">2.5 折</option>
+				<option value="0.2">2 折</option>
+			</select>
+		</div>
+	</div>
+	
+	<button id="calculate">計算損益</button>
+	
+	<div id="error" class="error" role="alert"></div>
+	
+	<p class="note" id="ruleNote" hidden></p>
+	
+	</section>
+	
+	
+	<!-- 損益兩平結果 -->
+	<section class="panel" id="breakPanel" hidden>
+	
+	<h2>損益兩平結果</h2>
+	
+	<div class="metrics">
+	
+		<div class="metric">
+			<small>損益兩平出場價格</small>
+			<strong id="breakPrice">—</strong>
+		</div>
+	
+		<div class="metric">
+			<small>與進場價相差</small>
+			<strong id="breakTicks">—</strong>
+		</div>
+	
+		<div class="metric">
+			<small>該價位預估損益</small>
+			<strong id="breakProfit">—</strong>
+		</div>
+	
+	</div>
+	
+	<p class="note" id="breakDetail"></p>
+	
+	</section>
+	
+	
+	<!-- 上下五檔結果 -->
+	<section class="panel" id="nearPanel" hidden>
+	
+	<h2>進場價格附近的獲利試算</h2>
+	
+	<p class="note">
+	以下依商品 Tick 規則，從進場價逐檔往上／往下推算。
+	做多時為假設賣出價格；做空時為假設買回價格。
+	損益已扣除預估手續費與賣方證交稅。
+	</p>
+	
+	<div class="tablewrap">
+	
+	<table>
+	
+	<thead>
+	<tr>
+		<th>方向</th>
+		<th>距離 Tick</th>
+		<th>假設出場／買回價</th>
+		<th>預估損益（元）</th>
+	</tr>
+	</thead>
+	
+	<tbody id="nearRows"></tbody>
+	
+	</table>
+	
+	</div>
+	
+	</section>
+	
+	
+	<!-- 計算說明 -->
+	<section class="panel" hidden>	
+		<h2>計算規則與注意事項</h2>
+		<p class="note">
+		手續費以成交金額 × 0.1425% × 折扣計算，
+		買進與賣出各計一次。
+		一般股票證交稅按賣出金額 0.015%，
+		一般 ETF 按賣出金額 0.1%。
+		</p>
+		<p class="note">
+		本工具採估算方式，未模擬券商每筆手續費整數進位、
+		最低收費等實際計費細節，因此與實際對帳單可能略有差異。
+		做空未計融券費、借券費及其他相關成本。
+		</p>
+	</section>
+
+</main>
+
+
+<script>
+"use strict";
+
+
+// =====================================
+// 一、基本費率
+// =====================================
+
+// 手續費原始費率 0.1425%
+const BASE_FEE = 0.001425;
+
+
+// 賣方證交稅
+const TAX = {
+    stock: 0.003*0.5,
+    etf: 0.001
+};
+
+
+// =====================================
+// 二、Tick 計算
+// =====================================
+
+
+// 取得價格所屬的 Tick
+function tickAt(price, product) {
+    // ETF
+    if (product === "etf") {
+        return price < 50 ? 0.01 : 0.05;
+    }
+
+    // 一般股票
+    if (price < 5) return 0.01;
+    if (price < 50) return 0.05;
+    if (price < 100) return 0.1;
+    if (price < 500) return 0.5;
+    if (price < 1000) return 1;
+    return 5;
+}
+
+
+// 檢查價格是否合法
+function isLegalPrice(price, product) {
+
+    if (!Number.isFinite(price) || price <= 0) {
+        return false;
+    }
+
+    // 轉換成整數分，避免浮點數誤差
+    const cents = Math.round(price * 100);
+
+    if (Math.abs(price * 100 - cents) > 0.000001) {
+        return false;
+    }
+
+    const tickCents = Math.round(
+        tickAt(price, product) * 100
+    );
+
+    return cents % tickCents === 0;
+}
+
+function newPrice(price,product,side){
+	let tick;
+	if(side=="up"){
+		tick=tickAt(price+0.000001, product)
+	}else{
+		tick=-tickAt(price-0.000001, product)
+	}
+    return Number((price + tick).toFixed(2));
+}
+
+// =====================================
+// 三、損益計算
+// =====================================
+
+
+function calculateProfit(
+    entry,
+    exit,
+    shares,
+    feeRate,
+    taxRate,
+    direction
+) {
+
+    let buyPrice;
+    let sellPrice;
+	
+    if (direction === "long") {
+
+        // 先買後賣
+        buyPrice = entry;
+        sellPrice = exit;
+
+    } else {
+
+        // 先賣後買
+        sellPrice = entry;
+        buyPrice = exit;
+    }
+	
+
+    const buyAmount = buyPrice * shares;
+
+    const sellAmount = sellPrice * shares;
+
+
+    // 買進與賣出手續費
+    const buyFee = buyAmount * feeRate;
+
+    const sellFee = sellAmount * feeRate;
+
+
+    // 證交稅以賣出金額計算
+    const tax = sellAmount * taxRate;
+
+
+    // 最終淨損益
+    return (
+        sellAmount
+        - buyAmount
+        - buyFee
+        - sellFee
+        - tax
+    );
+}
+
+
+
+// =====================================
+// 四、數字格式
+// =====================================
+
+
+function formatNumber(number) {
+
+    return number.toLocaleString("zh-TW", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+
+
+// =====================================
+// 五、商品規則說明
+// =====================================
+
+
+function setRuleNote(product) {
+
+    const notes = {
+
+        stock:
+        "一般股票 Tick：未滿 5 元 0.01；" +
+        "5～未滿 50 元 0.05；" +
+        "50～未滿 100 元 0.1；" +
+        "100～未滿 500 元 0.5；" +
+        "500～未滿 1,000 元 1；" +
+        "1,000 元以上 5。證交稅 0.3%。",
+
+        etf:
+        "ETF Tick：未滿 50 元 0.01；" +
+        "50 元以上 0.05。證交稅 0.1%。"
+    };
+
+    document.getElementById("ruleNote").textContent =
+        notes[product];
+}
+
+
+
+// =====================================
+// 六、損益兩平搜尋
+// =====================================
+
+
+function findBreakEven(
+    entry,
+    shares,
+    feeRate,
+    taxRate,
+    direction,
+    product
+) {
+
+    let currentPrice = entry;
+	const side = direction === "long" ? "up" : "down"
+	
+    for (let i = 1; i <= 200000; i++) {
+
+		const candidate=newPrice(currentPrice, product, side)
+
+        // 價格不可小於或等於零
+        if (candidate <= 0) {
+            break;
+        }
+
+
+        currentPrice = candidate;
+
+
+        const net = calculateProfit(
+            entry,
+            currentPrice,
+            shares,
+            feeRate,
+            taxRate,
+            direction
+        );
+
+
+        // 找到第一個損益大於或等於零的價格
+        if (net >= 0) {
+
+            return {
+                found: true,
+                price: currentPrice,
+                ticks: i,
+                profit: net
+            };
+        }
+    }
+
+
+    return {
+        found: false,
+        price: null,
+        ticks: null,
+        profit: null
+    };
+}
+
+
+
+// =====================================
+// 七、計算附近五檔價格(包含同價位進出)
+// =====================================
+function calculateNearbyPrices(
+    entry,
+    shares,
+    feeRate,
+    taxRate,
+    direction,
+    product
+) {
+
+    const rows = [];
+	const tmpRows = [];
+
+    for (const side of ["up", "down"]) {
+
+        let price = entry;
+
+
+        for (let i = 1; i <= 6; i++) {
+
+            if (side === "up") {
+				price = newPrice(price, product, side)
+            } else {
+				price = newPrice(price, product, side)
+            }
+
+
+            if (price <= 0) {
+                break;
+            }
+
+
+            const net = calculateProfit(
+                entry,
+                price,
+                shares,
+                feeRate,
+                taxRate,
+                direction
+            );
+
+
+            const profitClass =
+                net >= 0 ? "profit" : "loss";
+
+			tmpRows.push([side === "up" ? "往上" : "往下", i, formatNumber(price), profitClass, formatNumber(net)])
+        }
+    }
+	const net = calculateProfit(entry,entry,shares,feeRate,taxRate,direction)
+	const profitClass = net >= 0 ? "profit" : "loss";
+	tmpRows.push(["平", 0, formatNumber(entry), profitClass, formatNumber(net)])
+	
+	tmpRows.sort((a,b)=>a[2]-b[2]);
+
+	for(const r of tmpRows){
+		rows.push(`
+				<tr>
+					<td>${r[0]}</td>
+					<td>${r[1]}</td>
+					<td>${r[2]}</td>
+					<td class="${r[3]}">${r[4]}</td>
+				</tr>
+			`);
+	}
+    return rows;
+}
+
+
+
+// =====================================
+// 八、主計算程序
+// =====================================
+
+
+function calculate() {
+
+    const product =
+        document.getElementById("product").value;
+
+    const direction =
+        document.getElementById("direction").value;
+
+    const entry =
+        Number(document.getElementById("price").value);
+
+    const shares =
+        Number(document.getElementById("shares").value);
+
+    const discount =
+        Number(document.getElementById("discount").value);
+
+
+    const error =
+        document.getElementById("error");
+
+
+    // 清除錯誤訊息
+    error.textContent = "";
+
+
+    // 隱藏舊結果
+    document.getElementById("breakPanel").hidden = true;
+
+    document.getElementById("nearPanel").hidden = true;
+
+
+    // ---------------------------------
+    // 檢查價格
+    // ---------------------------------
+
+    if (!isLegalPrice(entry, product)) {
+
+        error.textContent =
+            "請輸入符合所選商品 Tick 規則的合法價格。";
+
+        return;
+    }
+
+
+    // ---------------------------------
+    // 檢查股數
+    // ---------------------------------
+
+    if (!Number.isSafeInteger(shares) || shares <= 0) {
+
+        error.textContent =
+            "股數請輸入大於 0 的整數。";
+
+        return;
+    }
+
+
+    // ---------------------------------
+    // 計算費率
+    // ---------------------------------
+
+    const feeRate = BASE_FEE * discount;
+
+    const taxRate = TAX[product];
+
+
+    // ---------------------------------
+    // 計算損益兩平
+    // ---------------------------------
+	
+    const result = findBreakEven(
+        entry,
+        shares,
+        feeRate,
+        taxRate,
+        direction,
+        product
+    );
+
+
+    document.getElementById("breakPanel").hidden = false;
+
+
+    if (result.found) {
+
+        document.getElementById("breakPrice").textContent =
+            formatNumber(result.price);
+
+
+        document.getElementById("breakTicks").textContent =
+            result.ticks + " Tick";
+
+
+        const profitElement =
+            document.getElementById("breakProfit");
+
+
+        profitElement.textContent =
+            formatNumber(result.profit);
+
+
+        profitElement.className =
+            result.profit >= 0 ? "profit" : "loss";
+
+
+        document.getElementById("breakDetail").textContent =
+            (direction === "long" ? "上漲" : "下跌") +
+            " " + result.ticks +
+            " 個 Tick 後，預估損益首次達到非負值。";
+
+    } else {
+
+        document.getElementById("breakPrice").textContent =
+            "無法計算";
+
+        document.getElementById("breakTicks").textContent =
+            "—";
+
+        document.getElementById("breakProfit").textContent =
+            "—";
+
+        document.getElementById("breakDetail").textContent =
+            "在可計算的價格範圍內，找不到損益兩平價位。";
+    }
+	
+
+
+    // ---------------------------------
+    // 計算上下各五檔
+    // ---------------------------------
+
+    const rows = calculateNearbyPrices(
+        entry,
+        shares,
+        feeRate,
+        taxRate,
+        direction,
+        product
+    );
+
+
+    document.getElementById("nearRows").innerHTML =
+        rows.join("") ||
+        '<tr><td colspan="4">沒有可用價格</td></tr>';
+
+
+    document.getElementById("nearPanel").hidden = false;
+
+}
+
+
+
+// =====================================
+// 九、事件處理
+// =====================================
+
+
+// 計算按鈕
+document.getElementById("calculate")
+    .addEventListener("click", calculate);
+
+
+// 商品類型變更
+document.getElementById("product")
+    .addEventListener("change", function() {
+
+        setRuleNote(this.value);
+
+        document.getElementById("breakPanel").hidden = true;
+
+        document.getElementById("nearPanel").hidden = true;
+    });
+
+
+// =====================================
+// 十、初始化
+// =====================================
+
+setRuleNote(
+    document.getElementById("product").value
+);
+
+calculate();
+
+</script>
+
+</body>
+</html>
